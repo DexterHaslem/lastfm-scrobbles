@@ -1,0 +1,142 @@
+<scrobbl-container>
+    <style>
+        .cont {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(5, 1fr);
+            gap: 15px;
+            margin: 15px;
+            padding: 5px;
+        }
+
+        .nowplaying {
+            border: 4px dotted red;
+            display: grid;
+            grid-template-rows: repeat(1, 1fr);
+            padding: 15px;
+        }
+
+        .item {
+            display: grid;
+            grid-template-rows: repeat(1, 1fr);
+            padding: 15px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+    </style>
+
+    <h3><a href="https://last.fm/user/dmh">dmh's last.fm</a> recently played</h3>
+    <div class="cont">
+        <div each={ item in state.tracks } class={'item'}>
+            <div class="{item.nowplaying ? 'nowplaying':'item'}">
+                <img src="{item.img}">
+                <a href="{item.url}">{item.artist} - {item.title}</a>
+                <span>{this.formatTime(item)}</span>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        //const WEBSOCKET_URL = "ws://127.0.0.1:8881/streaming?username=dmh";
+        const WEBSOCKET_URL = "wss://api.dmh.fm/streaming?username=dmh";
+        const moment = require('moment');
+        const R =  require('ramda');
+
+        export default {
+            formatTime(t) {
+                if (t.nowplaying) {
+                    return "now playing..";
+                } else {
+                    const now = moment();
+                    const myTime = moment.unix(parseInt(t.time));
+                    return myTime.from(now);
+                }
+            },
+            addNewTracks(newTracks) {
+                if (!this.state.tracks) {
+                    this.update({
+                        tracks: newTracks,
+                    });
+                } else {
+
+                    let tracks = R.clone(this.state.tracks);
+                    //const unique = R.filter(nt => R.none(et => et && et.hash === nt.hash, tracks), newTracks);
+                    let toRemove = [];
+                    let toSkip = [];
+
+                    // one last filter, we dont want to duplicate previously
+                    // most recent/now playing. this is not trivial yeehaw
+                    for (const newt of newTracks) {
+                        for (const existing of tracks) {
+                            if (existing.hash === newt.hash) {
+                                if (existing.url === newt.url && existing.nowplaying
+                                    && !newt.nowplaying) {
+                                    //console.log("remove: ", existing);
+                                    toRemove.push(existing);
+                                } else if (existing.nowplaying === newt.nowplaying
+                                    && existing.time === newt.time) {
+                                    //console.log("skip: ", newt);
+                                    toSkip.push(newt);
+                                }
+                            }
+                        }
+                    }
+
+                    const finalNew = R.reject(t => R.includes(t, toSkip), newTracks);
+                    const finalOld = R.reject(t => R.includes(t, toRemove), tracks);
+
+                    this.update({
+                        tracks: finalNew.concat(finalOld),
+                    });
+                }
+            },
+            wsOnOpen(evt) {
+                //console.debug(evt);
+                this.redrawInterval = setInterval(this.onTimer, 1500);
+            },
+            wsOnClose(evt) {
+                //console.debug(evt);
+                if (this.redrawInterval) {
+                    clearInterval(this.redrawInterval);
+                    this.redrawInterval = null;
+                }
+            },
+            wsOnMessage(evt) {
+                //console.debug(evt);
+                // assume its a list of tracks
+                if (evt && evt.data && evt.data.length > 10) {
+                    const newTracks = JSON.parse(evt.data);
+                    if (newTracks && newTracks.length > 0) {
+                        this.addNewTracks(newTracks);
+                    }
+                }
+            },
+            wsOnError(evt) {
+                console.debug(evt);
+            },
+            onBeforeUnmount() {
+
+            },
+            onTimer() {
+                this.update();
+            },
+            onMounted(props, state) {
+
+            },
+            onBeforeMount(props, state) {
+                this.state = {
+                    tracks: []
+                };
+                const ws = new WebSocket(WEBSOCKET_URL);
+                ws.onopen = this.wsOnOpen;
+                ws.onclose = this.wsOnClose;
+                ws.onmessage = this.wsOnMessage;
+                ws.onerror = this.wsOnError;
+            },
+        }
+    </script>
+</scrobbl-container>

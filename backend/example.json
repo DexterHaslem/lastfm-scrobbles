@@ -1,0 +1,6 @@
+{
+  "apiKey": "",
+  "apiSecret": "",
+  "updateSeconds": 30,
+  "listenAddress": "0.0.0.0:8881"
+}

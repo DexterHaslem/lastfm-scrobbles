@@ -1,0 +1,5 @@
+*.exe
+*.o
+sb
+.idea/
+sb.json
