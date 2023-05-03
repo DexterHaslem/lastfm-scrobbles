@@ -56,86 +56,105 @@
                     return myTime.from(now);
                 }
             },
+
+            convertTracks(lastFmResponse) {
+                // TODO: update ui to not need this conversion anymore cba
+                let tracks = R.path(['recenttracks', 'track'], lastFmResponse);
+                if (R.isNil(tracks)) {
+                    return [];
+                }
+                // this can be a root object vs array if there is only one track. thanks for the stupid api
+                // a lot easier to handle vs in go of course
+                if (!Array.isArray(tracks)) {
+                    tracks = [tracks];
+                }
+
+                const converted = R.map(lt => {
+                    return {
+                        nowplaying: R.path(['@attr', 'nowplaying'], lt) === 'true',
+                        title: R.prop('name', lt),
+                        album: R.path(['album', '#text'], lt),
+                        artist: R.path(['artist', '#text'], lt),
+                        img: R.prop('#text', R.find(R.propEq('extralarge', 'size'))(lt.image)),
+                        url: lt.url,
+                        hash: lt.url, // HACK: its unique in same way we were using hash hehe
+                    };
+                }, tracks);
+
+                return converted;
+            },
+            async requestTracks(userName) {
+                const apiUrl = new URL("https://ws.audioscrobbler.com/2.0/");
+                apiUrl.searchParams.append("method", "user.getrecenttracks");
+
+                // yes, this is intentionally committed, scanners be darned. u can use it :-)
+                // its not secret in any way when the client makes the request, network request would see the key param
+                // i was doing this server side and streaming over websocket for live updating (see ../backend go code)
+                // but idc, readonly part of key if someone wants to make it hit limits wp
+                apiUrl.searchParams.append("api_key", "ddda04000923282193dc219093589ceb");
+                apiUrl.searchParams.append("format", "json");
+                apiUrl.searchParams.append("nowplaying", "true");
+                apiUrl.searchParams.append("limit", "100");
+                apiUrl.searchParams.append("user", userName);
+
+                try {
+                    const response = await fetch(apiUrl.href);
+                    if (!response.ok) {
+                      console.error("response was not ok");
+                      return [];
+                    }
+                    const body = await response.json();
+                    return body;
+                  } catch (error) {
+                    console.error("There has been a problem with fetch operation:", error);
+                  }
+                  return [];
+            },
+            onBeforeMount(props, state) {
+                this.requestTracks('dmh')
+                    .then(this.convertTracks)
+                    .then(this.addNewTracks);
+            },
             addNewTracks(newTracks) {
                 if (!this.state.tracks) {
                     this.update({
                         tracks: newTracks,
                     });
-                } else {
+                    return;
+                }
 
-                    let tracks = R.clone(this.state.tracks);
-                    //const unique = R.filter(nt => R.none(et => et && et.hash === nt.hash, tracks), newTracks);
-                    let toRemove = [];
-                    let toSkip = [];
+                // diff and dont trample/dup now playing
 
-                    // one last filter, we dont want to duplicate previously
-                    // most recent/now playing. this is not trivial yeehaw
-                    for (const newt of newTracks) {
-                        for (const existing of tracks) {
-                            if (existing.hash === newt.hash) {
-                                if (existing.url === newt.url && existing.nowplaying
-                                    && !newt.nowplaying) {
-                                    //console.log("remove: ", existing);
-                                    toRemove.push(existing);
-                                } else if (existing.nowplaying === newt.nowplaying
-                                    && existing.time === newt.time) {
-                                    //console.log("skip: ", newt);
-                                    toSkip.push(newt);
-                                }
+                let tracks = R.clone(this.state.tracks);
+                //const unique = R.filter(nt => R.none(et => et && et.hash === nt.hash, tracks), newTracks);
+                let toRemove = [];
+                let toSkip = [];
+
+                // one last filter, we dont want to duplicate previously
+                // most recent/now playing. this is not trivial yeehaw
+                for (const newt of newTracks) {
+                    for (const existing of tracks) {
+                        if (existing.hash === newt.hash) {
+                            if (existing.url === newt.url && existing.nowplaying
+                                && !newt.nowplaying) {
+                                //console.log("remove: ", existing);
+                                toRemove.push(existing);
+                            } else if (existing.nowplaying === newt.nowplaying
+                                && existing.time === newt.time) {
+                                //console.log("skip: ", newt);
+                                toSkip.push(newt);
                             }
                         }
                     }
-
-                    const finalNew = R.reject(t => R.includes(t, toSkip), newTracks);
-                    const finalOld = R.reject(t => R.includes(t, toRemove), tracks);
-
-                    this.update({
-                        tracks: finalNew.concat(finalOld),
-                    });
                 }
-            },
-            wsOnOpen(evt) {
-                //console.debug(evt);
-                this.redrawInterval = setInterval(this.onTimer, 1500);
-            },
-            wsOnClose(evt) {
-                //console.debug(evt);
-                if (this.redrawInterval) {
-                    clearInterval(this.redrawInterval);
-                    this.redrawInterval = null;
-                }
-            },
-            wsOnMessage(evt) {
-                //console.debug(evt);
-                // assume its a list of tracks
-                if (evt && evt.data && evt.data.length > 10) {
-                    const newTracks = JSON.parse(evt.data);
-                    if (newTracks && newTracks.length > 0) {
-                        this.addNewTracks(newTracks);
-                    }
-                }
-            },
-            wsOnError(evt) {
-                console.debug(evt);
-            },
-            onBeforeUnmount() {
 
-            },
-            onTimer() {
-                this.update();
-            },
-            onMounted(props, state) {
+                const finalNew = R.reject(t => R.includes(t, toSkip), newTracks);
+                const finalOld = R.reject(t => R.includes(t, toRemove), tracks);
 
-            },
-            onBeforeMount(props, state) {
-                this.state = {
-                    tracks: []
-                };
-                const ws = new WebSocket(WEBSOCKET_URL);
-                ws.onopen = this.wsOnOpen;
-                ws.onclose = this.wsOnClose;
-                ws.onmessage = this.wsOnMessage;
-                ws.onerror = this.wsOnError;
+                this.update({
+                    tracks: finalNew.concat(finalOld),
+                });
+
             },
         }
     </script>
