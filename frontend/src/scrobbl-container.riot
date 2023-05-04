@@ -5,35 +5,26 @@
             flex-wrap: wrap;
         }
         .cont>* {
-            flex: 1 1 305px;
+            flex: 1 1 300px;
+            margin: 4px;
         }
         .nowplaying {
             color: red;
             display: grid;
             grid-template-rows: repeat(1, 1fr);
-            padding: 4px;
         }
 
         .item {
             display: grid;
             grid-template-rows: repeat(1, 1fr);
-            padding: 4px;
-        }
-
-        * {
-            box-sizing: border-box;
         }
     </style>
-
     <h3><a href="https://last.fm/user/dmh">dmh's last.fm</a> recently played</h3>
     <div class="cont">
-        <div each={ item in state.tracks } class={'item'}>
-            <div class="{item.nowplaying ? 'nowplaying':'item'}" style="{this.toItemStyle(item)}">
-                <img src="{item.img}">
-                <a href="{item.url}">{item.artist} - {item.title}</a>
-                <span>{this.formatTime(item)}</span>
-            </div>
-
+        <div each={ item in state.tracks } class="item" style="{this.toItemStyle(item)}">
+            <img src="{item.img}" />
+            <a href="{item.url}">{item.artist} - {item.title}</a>
+            <span>{this.formatTime(item)}</span>
         </div>
     </div>
 
@@ -84,10 +75,10 @@
                 }, tracks);
 
                 // we get 100 + now playing (if), fade out older tracks, we always get in chrono order to boot
-                let opacity = 1.0;
+                let opacity = 1.01;
                 for (let item of converted) {
-                    item.opacity = R.max(opacity, 0.08);
-                    opacity -= 0.006;
+                    item.opacity = R.max(opacity, 0.1);
+                    opacity -= 0.01;
                 }
                 return converted;
             },
