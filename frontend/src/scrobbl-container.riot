@@ -19,7 +19,9 @@
             grid-template-rows: repeat(1, 1fr);
         }
     </style>
-    <h3><a href="https://last.fm/user/dmh">dmh's last.fm</a> recently played</h3>
+    <h3>
+        <a href="https://last.fm/user/dmh">dmh's last.fm</a>recently played (<em><a href="https://github.com/DexterHaslem/lastfm-scrobbles">source</a></em>)
+     </h3>
     <div class="cont">
         <div each={ item in state.tracks } class="item" style="{this.toItemStyle(item)}">
             <img src="{item.img}" />
