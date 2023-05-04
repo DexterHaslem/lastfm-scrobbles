@@ -28,7 +28,7 @@
     <h3><a href="https://last.fm/user/dmh">dmh's last.fm</a> recently played</h3>
     <div class="cont">
         <div each={ item in state.tracks } class={'item'}>
-            <div class="{item.nowplaying ? 'nowplaying':'item'}">
+            <div class="{item.nowplaying ? 'nowplaying':'item'}" style="{this.toItemStyle(item)}">
                 <img src="{item.img}">
                 <a href="{item.url}">{item.artist} - {item.title}</a>
                 <span>{this.formatTime(item)}</span>
@@ -53,13 +53,17 @@
                     return myTime.from(now);
                 }
             },
-
+            toItemStyle(item) {
+                // helper for inline style of anything using item state that is item specific
+                return `opacity: ${item.opacity};`;
+            },
             convertTracks(lastFmResponse) {
                 // TODO: update ui to not need this conversion anymore cba
                 let tracks = R.path(['recenttracks', 'track'], lastFmResponse);
                 if (R.isNil(tracks)) {
                     return [];
                 }
+
                 // this can be a root object vs array if there is only one track. thanks for the stupid api
                 // a lot easier to handle vs in go of course
                 if (!Array.isArray(tracks)) {
@@ -74,36 +78,43 @@
                         artist: R.path(['artist', '#text'], lt),
                         img: R.prop('#text', R.find(R.propEq('extralarge', 'size'))(lt.image)),
                         url: lt.url,
-                        hash: lt.url, // HACK: its unique in same way we were using hash hehe
+                        hash: lt.url, // HACK: its unique in same way we were using hash hehe,
+                        time: R.path(['date', 'uts'], lt),
                     };
                 }, tracks);
 
+                // we get 100 + now playing (if), fade out older tracks, we always get in chrono order to boot
+                let opacity = 1.0;
+                for (let item of converted) {
+                    item.opacity = R.max(opacity, 0.08);
+                    opacity -= 0.006;
+                }
                 return converted;
             },
             async requestTracks(userName) {
-                const apiUrl = new URL("https://ws.audioscrobbler.com/2.0/");
-                apiUrl.searchParams.append("method", "user.getrecenttracks");
+                const apiUrl = new URL('https://ws.audioscrobbler.com/2.0/');
+                apiUrl.searchParams.append('method', 'user.getrecenttracks');
 
                 // yes, this is intentionally committed, scanners be darned. u can use it :-)
                 // its not secret in any way when the client makes the request, network request would see the key param
                 // i was doing this server side and streaming over websocket for live updating (see ../backend go code)
                 // but idc, readonly part of key if someone wants to make it hit limits wp
-                apiUrl.searchParams.append("api_key", "ddda04000923282193dc219093589ceb");
-                apiUrl.searchParams.append("format", "json");
-                apiUrl.searchParams.append("nowplaying", "true");
-                apiUrl.searchParams.append("limit", "100");
-                apiUrl.searchParams.append("user", userName);
+                apiUrl.searchParams.append('api_key', 'ddda04000923282193dc219093589ceb');
+                apiUrl.searchParams.append('format', 'json');
+                apiUrl.searchParams.append('nowplaying', 'true');
+                apiUrl.searchParams.append('limit', '100');
+                apiUrl.searchParams.append('user', userName);
 
                 try {
                     const response = await fetch(apiUrl.href);
                     if (!response.ok) {
-                      console.error("response was not ok");
+                      console.error('response was not ok');
                       return [];
                     }
                     const body = await response.json();
                     return body;
                   } catch (error) {
-                    console.error("There has been a problem with fetch operation:", error);
+                    console.error('There has been a problem with fetch operation:', error);
                   }
                   return [];
             },
@@ -132,13 +143,11 @@
                 for (const newt of newTracks) {
                     for (const existing of tracks) {
                         if (existing.hash === newt.hash) {
-                            if (existing.url === newt.url && existing.nowplaying
-                                && !newt.nowplaying) {
-                                //console.log("remove: ", existing);
+                            if (existing.url === newt.url && existing.nowplaying && !newt.nowplaying) {
+                                //console.log('remove: ', existing);
                                 toRemove.push(existing);
-                            } else if (existing.nowplaying === newt.nowplaying
-                                && existing.time === newt.time) {
-                                //console.log("skip: ", newt);
+                            } else if (existing.nowplaying === newt.nowplaying && existing.time === newt.time) {
+                                //console.log('skip: ', newt);
                                 toSkip.push(newt);
                             }
                         }
